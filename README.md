@@ -178,12 +178,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Test on multiple platforms when possible
 
 
-## 🏆 Acknowledgments
-
-- **GLFW Team** for excellent window management
-- **ImGui Contributors** for the fantastic UI framework
-- **OpenGL Community** for graphics pipeline documentation
-- **GLM Authors** for comprehensive mathematics support
-
 ---
 
