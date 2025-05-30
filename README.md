@@ -169,7 +169,9 @@ The project uses CMake for cross-platform building. All dependencies are include
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 🤝 Contributing
 
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ### Development Guidelines
 - Follow C++17 standards
@@ -177,6 +179,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Add comments for complex algorithms
 - Test on multiple platforms when possible
 
+## 📞 Support
+
+For questions, bug reports, or feature requests, please:
+- Open an [Issue](https://github.com/ragnarokfate/AerodynamicsSimulation/issues)
+- Check existing [Discussions](https://github.com/ragnarokfate/AerodynamicsSimulation/discussions)
+
+## 🏆 Acknowledgments
+
+- **GLFW Team** for excellent window management
+- **ImGui Contributors** for the fantastic UI framework
+- **OpenGL Community** for graphics pipeline documentation
+- **GLM Authors** for comprehensive mathematics support
 
 ---
+
+**Built with ❤️ for the CFD and Computer Graphics community**
 

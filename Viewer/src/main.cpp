@@ -50,6 +50,8 @@ void Cleanup(GLFWwindow* window);
 void DrawImguiMenus(ImGuiIO& io, Scene& scene);
 void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene);
 void PrintMatrix(mat4x4 input);
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+void InitializeAerodynamicsPostProcessing();
 /**
  * Function implementation
  */
@@ -104,6 +106,7 @@ int main(int argc, char **argv)
 	//scene.AddModel(first_model);
 	ImGuiIO& io = SetupDearImgui(window);
 	glfwSetScrollCallback(window, ScrollCallback);
+	glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 	
 	// Set scene pointer for callbacks
 	glfwSetWindowUserPointer(window, &scene);
@@ -1319,6 +1322,9 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 					if (!aerodynamicsSystem->initialize(scene.GetActiveModelPointer())) {
 						aerodynamicsSystem.reset();
 						ImGui::OpenPopup("Error");
+					} else {
+						// Initialize post-processing for the newly created aerodynamics system
+						InitializeAerodynamicsPostProcessing();
 					}
 				} catch (const std::exception& e) {
 					aerodynamicsSystem.reset();
@@ -1446,8 +1452,106 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 			vizChanged = true;
 		}
 		
-		if (vizChanged) {
-			aerodynamicsSystem->updateVisualizationParameters(vizParams);
+		// Post-processing controls for Gaussian blur
+		if (ImGui::CollapsingHeader("Post-Processing")) {
+			auto visualizer = aerodynamicsSystem->getVisualizer();
+			if (visualizer) {
+				ImGui::Text("Gaussian Blur Settings:");
+				
+				// Pressure field blur controls
+				bool pressureBlurEnabled = visualizer->IsPressureBlurEnabled();
+				if (ImGui::Checkbox("Pressure Field Blur", &pressureBlurEnabled)) {
+					visualizer->EnablePressureBlur(pressureBlurEnabled);
+				}
+				if (pressureBlurEnabled) {
+					ImGui::Indent();
+					ImGui::Text("Smooths pressure visualization for cleaner data display");
+					ImGui::Unindent();
+				}
+				
+				// Velocity field blur controls  
+				bool velocityBlurEnabled = visualizer->IsVelocityBlurEnabled();
+				if (ImGui::Checkbox("Velocity Field Blur", &velocityBlurEnabled)) {
+					visualizer->EnableVelocityBlur(velocityBlurEnabled);
+				}
+				if (velocityBlurEnabled) {
+					ImGui::Indent();
+					ImGui::Text("Smooths velocity vectors for enhanced flow visualization");
+					ImGui::Unindent();
+				}
+				
+				// Blur parameters (only show if at least one blur is enabled)
+				if (pressureBlurEnabled || velocityBlurEnabled) {
+					ImGui::Separator();
+					ImGui::Text("Blur Parameters:");
+					
+					// Get current blur settings from the visualizer
+					static float blurRadius = 1.5f;
+					static float blurStrength = 0.4f;
+					static int blurIterations = 2;
+					
+					bool blurParamsChanged = false;
+					if (ImGui::SliderFloat("Blur Radius", &blurRadius, 0.1f, 5.0f, "%.2f")) {
+						blurParamsChanged = true;
+					}
+					ImGui::SameLine(); 
+					if (ImGui::Button("?##radius")) {
+						ImGui::SetTooltip("Controls the spread of the blur effect. Higher values create more diffuse smoothing.");
+					}
+					
+					if (ImGui::SliderFloat("Blur Strength", &blurStrength, 0.1f, 1.0f, "%.2f")) {
+						blurParamsChanged = true;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("?##strength")) {
+						ImGui::SetTooltip("Controls the intensity of the blur effect. Higher values create stronger smoothing.");
+					}
+					
+					if (ImGui::SliderInt("Blur Iterations", &blurIterations, 1, 5)) {
+						blurParamsChanged = true;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("?##iterations")) {
+						ImGui::SetTooltip("Number of blur passes. More iterations create smoother results but reduce performance.");
+					}
+					
+					// Apply blur parameters if changed
+					if (blurParamsChanged) {
+						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
+					}
+					
+					// Performance warning for high settings
+					if (blurIterations > 3 || blurRadius > 3.0f) {
+						ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ High blur settings may impact performance");
+					}
+					
+					// Quick presets
+					ImGui::Separator();
+					ImGui::Text("Quick Presets:");
+					if (ImGui::Button("Subtle")) {
+						blurRadius = 1.0f;
+						blurStrength = 0.2f;
+						blurIterations = 1;
+						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Moderate")) {
+						blurRadius = 1.5f;
+						blurStrength = 0.4f;
+						blurIterations = 2;
+						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Strong")) {
+						blurRadius = 2.5f;
+						blurStrength = 0.7f;
+						blurIterations = 3;
+						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
+					}
+				}
+			} else {
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Post-processing unavailable - visualizer not initialized");
+			}
 		}
 	}
 
@@ -1475,4 +1579,37 @@ void PrintMatrix(mat4x4 input)
 		ImGui::Text("%f %f %f %f", input[i].x, input[i].y, input[i].z, input[i].w);
 	}
 	ImGui::NewLine();
+}
+
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+	// Update global viewport dimensions
+	view_width = width;
+	view_height = height;
+	
+	// Update OpenGL viewport
+	glViewport(0, 0, width, height);
+	
+	// Update post-processing for aerodynamics system if initialized
+	if (aerodynamicsSystem) {
+		auto visualizer = aerodynamicsSystem->getVisualizer();
+		if (visualizer) {
+			visualizer->ResizePostProcessing(width, height);
+		}
+	}
+	
+	std::cout << "Viewport resized to: " << width << "x" << height << std::endl;
+}
+
+void InitializeAerodynamicsPostProcessing()
+{
+	// Initialize post-processing for aerodynamics system if it exists
+	if (aerodynamicsSystem && view_width > 0 && view_height > 0) {
+		auto visualizer = aerodynamicsSystem->getVisualizer();
+		if (visualizer) {
+			visualizer->InitializePostProcessing(view_width, view_height);
+			std::cout << "Aerodynamics post-processing initialized with viewport: " 
+			          << view_width << "x" << view_height << std::endl;
+		}
+	}
 }

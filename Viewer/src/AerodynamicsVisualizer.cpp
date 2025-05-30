@@ -23,6 +23,51 @@ void AerodynamicsVisualizer::Initialize() {
     std::cout << "AerodynamicsVisualizer initialized" << std::endl;
 }
 
+void AerodynamicsVisualizer::InitializePostProcessing(int width, int height)
+{
+    postProcessor.Initialize(width, height);
+    postProcessingInitialized = true;
+    std::cout << "AerodynamicsVisualizer: Post-processing initialized with Gaussian blur" << std::endl;
+}
+
+void AerodynamicsVisualizer::ResizePostProcessing(int width, int height)
+{
+    if (postProcessingInitialized) {
+        postProcessor.Resize(width, height);
+    }
+}
+
+void AerodynamicsVisualizer::SetBlurParameters(float radius, float strength, int iterations)
+{
+    blurRadius = radius;
+    blurStrength = strength;
+    blurIterations = iterations;
+    
+    if (postProcessingInitialized) {
+        postProcessor.SetBlurParameters(radius, strength, iterations);
+    }
+}
+
+void AerodynamicsVisualizer::EnablePressureBlur(bool enable)
+{
+    pressureBlurEnabled = enable;
+}
+
+void AerodynamicsVisualizer::EnableVelocityBlur(bool enable)
+{
+    velocityBlurEnabled = enable;
+}
+
+bool AerodynamicsVisualizer::IsPressureBlurEnabled() const
+{
+    return pressureBlurEnabled && postProcessingInitialized;
+}
+
+bool AerodynamicsVisualizer::IsVelocityBlurEnabled() const
+{
+    return velocityBlurEnabled && postProcessingInitialized;
+}
+
 void AerodynamicsVisualizer::Cleanup() {
     if (!isInitialized) return;
     
@@ -97,13 +142,41 @@ void AerodynamicsVisualizer::RenderVelocityVectors(const AerodynamicsGrid& grid,
     velocityShader.setUniform("uView", view);
     velocityShader.setUniform("uProjection", projection);
     velocityShader.setUniform("uVelocityScale", settings.velocityScale);
-    velocityShader.setUniform("uMaxVelocity", GetMaxVelocity(grid));
     
-    // Enhanced line width for better visibility
-    glLineWidth(3.0f);
-      glBindVertexArray(velocityVAO);
-    glDrawArrays(GL_LINES, 0, velocityVertexData.size() / 6); // Each vertex has 6 floats (position + velocity)
-    glBindVertexArray(0);
+    float maxVelocity = GetMaxVelocity(grid);
+    velocityShader.setUniform("uMaxVelocity", maxVelocity);
+    
+    if (IsVelocityBlurEnabled() && postProcessingInitialized) {
+        // Enable smooth line rendering for blur effect
+        glEnable(GL_LINE_SMOOTH);
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
+        // Render multiple passes with different line widths for blur effect
+        glBindVertexArray(velocityVAO);
+        
+        // First pass - thickest lines with lowest opacity (background blur)
+        glLineWidth(8.0f);
+        glDrawArrays(GL_LINES, 0, velocityVertexData.size() / 6);
+        
+        // Second pass - medium lines 
+        glLineWidth(5.0f);
+        glDrawArrays(GL_LINES, 0, velocityVertexData.size() / 6);
+        
+        // Third pass - normal lines (main detail)
+        glLineWidth(3.0f);
+        glDrawArrays(GL_LINES, 0, velocityVertexData.size() / 6);
+        
+        glBindVertexArray(0);
+        glDisable(GL_LINE_SMOOTH);
+    } else {
+        // Standard velocity vector rendering without blur
+        glLineWidth(3.0f);
+        glBindVertexArray(velocityVAO);
+        glDrawArrays(GL_LINES, 0, velocityVertexData.size() / 6);
+        glBindVertexArray(0);
+    }
     
     // Reset line width
     glLineWidth(1.0f);
@@ -116,12 +189,57 @@ void AerodynamicsVisualizer::RenderPressureField(const AerodynamicsGrid& grid, c
     pressureShader.setUniform("view", view);
     pressureShader.setUniform("projection", projection);
     
-    // Optimize pressure point rendering for better visibility
-    glPointSize(3.0f); // Larger points for pressure field visualization
+    // Find pressure range for color mapping
+    float minPressure = 0.0f, maxPressure = 0.0f;
+    bool first = true;
+    ivec3 dimensions = grid.GetDimensions();
     
-    glBindVertexArray(pressureVAO);
-    glDrawArrays(GL_POINTS, 0, pressureVertices.size());
-    glBindVertexArray(0);
+    for (int z = 0; z < dimensions.z; z++) {
+        for (int y = 0; y < dimensions.y; y++) {
+            for (int x = 0; x < dimensions.x; x++) {
+                const Voxel& voxel = grid.GetVoxel(x, y, z);
+                if (!voxel.isSolid) {
+                    if (first) {
+                        minPressure = maxPressure = voxel.pressure;
+                        first = false;
+                    } else {
+                        minPressure = std::min(minPressure, voxel.pressure);
+                        maxPressure = std::max(maxPressure, voxel.pressure);
+                    }
+                }
+            }
+        }
+    }
+    
+    pressureShader.setUniform("uMinPressure", minPressure);
+    pressureShader.setUniform("uMaxPressure", maxPressure);    if (IsPressureBlurEnabled() && postProcessingInitialized) {
+        // Enable blending for smooth blur effect
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
+        // Render multiple passes with different point sizes for blur effect
+        glBindVertexArray(pressureVAO);
+        
+        // First pass - largest points (background blur)
+        glPointSize(12.0f);
+        glDrawArrays(GL_POINTS, 0, pressureVertices.size());
+        
+        // Second pass - medium points
+        glPointSize(8.0f);
+        glDrawArrays(GL_POINTS, 0, pressureVertices.size());
+        
+        // Third pass - normal points (main detail)
+        glPointSize(5.0f);
+        glDrawArrays(GL_POINTS, 0, pressureVertices.size());
+        
+        glBindVertexArray(0);
+    } else {
+        // Standard pressure field rendering without blur
+        glPointSize(4.0f);
+        glBindVertexArray(pressureVAO);
+        glDrawArrays(GL_POINTS, 0, pressureVertices.size());
+        glBindVertexArray(0);
+    }
     
     // Reset to default point size
     glPointSize(1.0f);

@@ -19,7 +19,7 @@ using namespace std;
 Renderer::Renderer()
 {
 	// Constructor cleaned up - skybox and cubemap removed
-
+	postProcessingInitialized = false;
 }
 
 Renderer::~Renderer()
@@ -29,6 +29,8 @@ Renderer::~Renderer()
 		glDeleteVertexArrays(1, &axisVAO);
 		glDeleteBuffers(1, &axisVBO);
 	}
+	
+	// Post-processor will clean up itself automatically
 }
 
 void Renderer::Render(const Scene& scene)
@@ -92,6 +94,42 @@ void Renderer::LoadShaders()
 	
 	// Initialize axis rendering buffers
 	InitializeAxisBuffers();
+}
+
+void Renderer::InitializePostProcessing(int width, int height)
+{
+	postProcessor.Initialize(width, height);
+	postProcessingInitialized = true;
+	std::cout << "Renderer: Post-processing initialized with Gaussian blur support" << std::endl;
+}
+
+void Renderer::ResizePostProcessing(int width, int height)
+{
+	if (postProcessingInitialized) {
+		postProcessor.Resize(width, height);
+	}
+}
+
+void Renderer::SetBlurParameters(float radius, float strength, int iterations)
+{
+	if (postProcessingInitialized) {
+		postProcessor.SetBlurParameters(radius, strength, iterations);
+	}
+}
+
+void Renderer::EnableBlur(bool enable)
+{
+	if (postProcessingInitialized) {
+		postProcessor.EnableBlur(enable);
+	}
+}
+
+bool Renderer::IsBlurEnabled() const
+{
+	if (postProcessingInitialized) {
+		return postProcessor.IsBlurEnabled();
+	}
+	return false;
 }
 
 void Renderer::InitializeAxisBuffers()
