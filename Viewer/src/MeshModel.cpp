@@ -15,7 +15,7 @@ MeshModel::MeshModel(std::vector<Face> faces, std::vector<glm::vec3> vertices, s
 {
 	this->MeshModelTransformation.ResetTransformation();
 	this->WorldTransformation.ResetTransformation();
-	this->MeshModelTransformation.SetScaleBar(vec3(0.5f, 0.5f, 0.5f));
+	// Automatic scaling will be applied after calculating bounds
 
 	vec3 MaxCoordinates = GetVertex(0, 0);
 	vec3 MinCoordinates = GetVertex(0, 0);
@@ -79,6 +79,9 @@ MeshModel::MeshModel(std::vector<Face> faces, std::vector<glm::vec3> vertices, s
 	MinPoints = MinCoordinates;
 	MaxPoints = MaxCoordinates;
 	CenterPoint = (MinCoordinates + MaxCoordinates) / 2.0f;
+	
+	// Automatically scale and center the model for optimal display
+	AutoScaleAndCenter(2.0f); // Target size of 2 units (adjustable)
 }
 
 MeshModel::~MeshModel()
@@ -176,6 +179,49 @@ void MeshModel::UpdateModelVerticesData(std::vector<Vertex>& newVertices)
 	glBufferSubData(GL_ARRAY_BUFFER, 0, newVertices.size() * sizeof(Vertex), &newVertices[0]);
 
 	glBindVertexArray(0);
+}
+
+void MeshModel::AutoScaleAndCenter(float targetSize)
+{
+	// Calculate the optimal scale factor
+	float scale = CalculateOptimalScale(targetSize);
+	
+	// Calculate the center offset to center the model at origin
+	vec3 modelCenter = (MinPoints + MaxPoints) / 2.0f;
+	
+	// Reset transformations and apply new ones
+	MeshModelTransformation.ResetTransformation();
+	WorldTransformation.ResetTransformation();
+	
+	// Apply centering (translate to origin)
+	MeshModelTransformation.SetTranslateBar(-modelCenter);
+	
+	// Apply uniform scaling
+	MeshModelTransformation.SetScaleBar(vec3(scale, scale, scale));
+	
+	// Update the center point for rendering calculations
+	CenterPoint = vec3(0.0f, 0.0f, 0.0f); // Model is now centered at origin
+}
+
+float MeshModel::CalculateOptimalScale(float targetSize) const
+{
+	vec3 modelSize = GetModelSize();
+	
+	// Find the largest dimension to ensure the model fits in all directions
+	float maxDimension = std::max({modelSize.x, modelSize.y, modelSize.z});
+	
+	// Calculate scale to fit within target size
+	if (maxDimension > 0.0f) {
+		return targetSize / maxDimension;
+	}
+	
+	// Default scale if calculation fails
+	return 1.0f;
+}
+
+vec3 MeshModel::GetModelSize() const
+{
+	return MaxPoints - MinPoints;
 }
 
 void MeshModel::SetTextureMapping()

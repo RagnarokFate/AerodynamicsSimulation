@@ -23,7 +23,7 @@
 bool show_demo_window = false;
 bool show_another_window = false;
 
-glm::vec4 clear_color = glm::vec4(0.2f, 0.2f, 0.2f, 1.00f);
+glm::vec4 clear_color = glm::vec4(1.0f, 1.0f, 1.0f, 1.00f);
 static int Model_Number = 0;
 static int view_width = 0;
 static int view_height = 0;
@@ -195,8 +195,6 @@ void RenderFrame(GLFWwindow* window, Scene& scene, Renderer& renderer, ImGuiIO& 
 	//glfwGetFramebufferSize(window, &frameBufferWidth, &frameBufferHeight);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.a);
 	glEnable(GL_DEPTH_TEST);
-	static vec2 PreviousPosition = vec2(io.MousePos.x, io.MousePos.y);
-	vec2 CurrentPosition = vec2(io.MousePos.x, io.MousePos.y);
 	
 	// Clear the screen and depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1447,9 +1445,13 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 				vizChanged = true;
 			}
 		}
-		
-		if (ImGui::Checkbox("Grid Wireframe", &vizParams.showGrid)) {
+				if (ImGui::Checkbox("Grid Wireframe", &vizParams.showGrid)) {
 			vizChanged = true;
+		}
+		
+		// Apply visualization parameter changes
+		if (vizChanged) {
+			aerodynamicsSystem->updateVisualizationParameters(vizParams);
 		}
 		
 		// Post-processing controls for Gaussian blur

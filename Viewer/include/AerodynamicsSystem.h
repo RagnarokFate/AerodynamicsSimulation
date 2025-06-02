@@ -88,6 +88,7 @@ public:
     std::shared_ptr<AerodynamicsGrid> getGrid() const { return m_grid; }
     std::shared_ptr<FluidSimulation> getFluidSimulation() const { return m_fluidSim; }
     std::shared_ptr<AerodynamicsVisualizer> getVisualizer() const { return m_visualizer; }
+    std::shared_ptr<MeshModel> getMeshModel() const { return m_meshModel; }
 
 private:
     // Core components

@@ -43,6 +43,12 @@ public:
 	void MeshModel::UpdateModelVerticesData(std::vector<Vertex>& newVertices);
 	void MeshModel::SetTextureMapping();
 	void MeshModel::SetTextureMapping(int Type);
+	
+	// Auto-scaling and centering methods
+	void AutoScaleAndCenter(float targetSize = 2.0f);
+	float CalculateOptimalScale(float targetSize = 2.0f) const;
+	vec3 GetModelSize() const;
+	
 private:
 	std::vector<Face> faces;
 	std::vector<glm::vec3> vertices;
@@ -60,7 +66,7 @@ public :
 	vec3 WorldBoundingBoxColor = vec3(0.8f, 0.8f, 0.3f);
 	vec3 FacesRectangleColor = vec3(1.0f, 1.0f, 1.0f);
 
-	bool NormalsDraw = false, CenterOfFaceDraw = false, BoundingBoxDraw = false, OffGridDraw = false, Local_Axis = false, WorldBoundingBox = false, DrawFacesRectangles = false, FacesRectangles = false, TriangleFill = false;
+	bool NormalsDraw = false, CenterOfFaceDraw = false, BoundingBoxDraw = false, OffGridDraw = false, Local_Axis = false, WorldBoundingBox = false, DrawFacesRectangles = false, FacesRectangles = false, TriangleFill = true;
 
 	float NormalsLength = 50.0f;
 	float CenterOfFaceLength = 50.0f;

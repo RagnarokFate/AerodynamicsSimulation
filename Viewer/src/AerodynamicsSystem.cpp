@@ -221,10 +221,14 @@ void AerodynamicsSystem::updateVisualizationParameters(const VisualizationParame
         // Update particle count if changed
         if (params.particleCount != m_visualizationParams.particleCount) {
             m_visualizer->setParticleCount(params.particleCount);
+            m_visualizationParams.particleCount = params.particleCount;
         }
         
         // Update streamline parameters
         m_visualizer->setStreamlineParameters(params.streamlineCount, params.maxStreamlineLength);
+        
+        // Force update of visualization data to apply changes immediately
+        updateVisualizationData();
     }
 }
 

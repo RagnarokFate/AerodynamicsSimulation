@@ -308,13 +308,20 @@ void AerodynamicsVisualizer::UpdateParticles(const FluidSimulation& simulation, 
     auto grid = simulation.GetGrid();
     if (!grid) return;
     
+    vec3 minBounds = grid->GetMinBounds();
+    vec3 maxBounds = grid->GetMaxBounds();
+    vec3 domainSize = maxBounds - minBounds;
+    
     // Update existing particles
     for (auto& particle : particles) {
         if (particle.life <= 0.0f) {
-            // Reset particle to inlet
-            particle.position = grid->GetMinBounds() + vec3(0.1f, 
-                static_cast<float>(rand()) / RAND_MAX * (grid->GetMaxBounds().y - grid->GetMinBounds().y),
-                static_cast<float>(rand()) / RAND_MAX * (grid->GetMaxBounds().z - grid->GetMinBounds().z));
+            // Reset particle to inlet area with better distribution
+            float inletWidth = domainSize.x * 0.15f;
+            particle.position = vec3(
+                minBounds.x + 0.05f + static_cast<float>(rand()) / RAND_MAX * inletWidth,
+                minBounds.y + 0.1f * domainSize.y + static_cast<float>(rand()) / RAND_MAX * 0.8f * domainSize.y,
+                minBounds.z + 0.1f * domainSize.z + static_cast<float>(rand()) / RAND_MAX * 0.8f * domainSize.z
+            );
             particle.life = particle.maxLife;
         }
         
@@ -322,12 +329,31 @@ void AerodynamicsVisualizer::UpdateParticles(const FluidSimulation& simulation, 
         if (grid->IsInsideBounds(particle.position)) {
             ivec3 gridPos = grid->WorldToGrid(particle.position);
             const Voxel& voxel = grid->GetVoxel(gridPos.x, gridPos.y, gridPos.z);
-            particle.velocity = voxel.velocity;
+            
+            // Only use velocity if not in solid voxel
+            if (!voxel.isSolid) {
+                particle.velocity = voxel.velocity;
+            } else {
+                // If particle entered solid, respawn it
+                particle.life = 0.0f;
+                continue;
+            }
+        } else {
+            // Particle left domain, respawn it
+            particle.life = 0.0f;
+            continue;
         }
         
-        // Update position
+        // Update position with velocity
         particle.position += particle.velocity * deltaTime;
         particle.life -= deltaTime;
+        
+        // Check if particle has left domain bounds
+        if (particle.position.x > maxBounds.x || 
+            particle.position.y < minBounds.y || particle.position.y > maxBounds.y ||
+            particle.position.z < minBounds.z || particle.position.z > maxBounds.z) {
+            particle.life = 0.0f; // Force respawn
+        }
     }
 }
 
@@ -335,15 +361,23 @@ void AerodynamicsVisualizer::ResetParticles(const AerodynamicsGrid& grid) {
     particles.clear();
     particles.reserve(settings.numParticles);
     
+    // Use grid bounds as fallback if no mesh model is available
     vec3 minBounds = grid.GetMinBounds();
     vec3 maxBounds = grid.GetMaxBounds();
     
+    // Position particles in a more realistic inlet area (left side of domain)
+    // This creates a more natural flow visualization where particles enter from upwind
+    vec3 inletSize = maxBounds - minBounds;
+    float inletWidth = inletSize.x * 0.15f; // Use 15% of domain width for inlet
+    
     for (int i = 0; i < settings.numParticles; i++) {
         FlowParticle particle;
+        
+        // Position particles in the inlet zone (upwind area)
         particle.position = vec3(
-            minBounds.x + 0.1f,
-            minBounds.y + static_cast<float>(rand()) / RAND_MAX * (maxBounds.y - minBounds.y),
-            minBounds.z + static_cast<float>(rand()) / RAND_MAX * (maxBounds.z - minBounds.z)
+            minBounds.x + 0.05f + static_cast<float>(rand()) / RAND_MAX * inletWidth,
+            minBounds.y + 0.1f * inletSize.y + static_cast<float>(rand()) / RAND_MAX * 0.8f * inletSize.y,
+            minBounds.z + 0.1f * inletSize.z + static_cast<float>(rand()) / RAND_MAX * 0.8f * inletSize.z
         );
         particle.life = particle.maxLife;
         particles.push_back(particle);
@@ -410,20 +444,62 @@ void AerodynamicsVisualizer::UpdateMeshPressureColors(MeshModel& meshModel, cons
 
 vec3 AerodynamicsVisualizer::ColorMapPressure(float pressure, float minPressure, float maxPressure) const {
     if (maxPressure <= minPressure) {
-        return settings.pressureColorLow;
+        return vec3(0.0f, 0.0f, 1.0f); // Blue for neutral pressure
     }
-      float t = (pressure - minPressure) / (maxPressure - minPressure);
-    t = std::max(0.0f, std::min(1.0f, t));
     
-    return mix(settings.pressureColorLow, settings.pressureColorHigh, t);
+    float normalized = (pressure - minPressure) / (maxPressure - minPressure);
+    normalized = std::max(0.0f, std::min(1.0f, normalized));
+    
+    // Scientific pressure color mapping for aerodynamics
+    // Blue (low pressure) -> Green (neutral) -> Yellow -> Orange -> Red (high pressure)
+    if (normalized < 0.25f) {
+        // Low pressure: Deep blue to light blue
+        float t = normalized / 0.25f;
+        return mix(vec3(0.0f, 0.0f, 0.8f), vec3(0.2f, 0.6f, 1.0f), t);
+    } else if (normalized < 0.5f) {
+        // Medium-low pressure: Light blue to green
+        float t = (normalized - 0.25f) / 0.25f;
+        return mix(vec3(0.2f, 0.6f, 1.0f), vec3(0.0f, 1.0f, 0.0f), t);
+    } else if (normalized < 0.75f) {
+        // Medium-high pressure: Green to yellow
+        float t = (normalized - 0.5f) / 0.25f;
+        return mix(vec3(0.0f, 1.0f, 0.0f), vec3(1.0f, 1.0f, 0.0f), t);
+    } else {
+        // High pressure: Yellow to red
+        float t = (normalized - 0.75f) / 0.25f;
+        return mix(vec3(1.0f, 1.0f, 0.0f), vec3(1.0f, 0.0f, 0.0f), t);
+    }
 }
 
 vec3 AerodynamicsVisualizer::ColorMapVelocity(float velocityMagnitude, float maxVelocity) const {
     if (maxVelocity <= 0.0f) {
-        return settings.velocityColor;
+        return vec3(0.7f, 0.85f, 1.0f); // Light blue for still air
     }
-      float t = std::max(0.0f, std::min(1.0f, velocityMagnitude / maxVelocity));
-    return settings.velocityColor * t;
+    
+    float normalized = std::max(0.0f, std::min(1.0f, velocityMagnitude / maxVelocity));
+    
+    // Enhanced fluid color mapping for natural air flow visualization
+    if (normalized < 0.15f) {
+        // Very still air - almost transparent light blue
+        float t = normalized / 0.15f;
+        return mix(vec3(0.9f, 0.95f, 1.0f), vec3(0.7f, 0.85f, 1.0f), t);
+    } else if (normalized < 0.4f) {
+        // Gentle movement - light blue to medium blue
+        float t = (normalized - 0.15f) / 0.25f;
+        return mix(vec3(0.7f, 0.85f, 1.0f), vec3(0.4f, 0.7f, 1.0f), t);
+    } else if (normalized < 0.65f) {
+        // Medium flow - blue to cyan with more saturation
+        float t = (normalized - 0.4f) / 0.25f;
+        return mix(vec3(0.4f, 0.7f, 1.0f), vec3(0.1f, 0.8f, 1.0f), t);
+    } else if (normalized < 0.85f) {
+        // Fast flow - cyan to bright cyan-white
+        float t = (normalized - 0.65f) / 0.2f;
+        return mix(vec3(0.1f, 0.8f, 1.0f), vec3(0.6f, 0.95f, 1.0f), t);
+    } else {
+        // Very fast/turbulent flow - bright cyan-white to pure white
+        float t = (normalized - 0.85f) / 0.15f;
+        return mix(vec3(0.6f, 0.95f, 1.0f), vec3(0.95f, 0.98f, 1.0f), t);
+    }
 }
 
 void AerodynamicsVisualizer::SetupVelocityBuffers() {
@@ -513,15 +589,40 @@ void AerodynamicsVisualizer::UpdateVelocityBuffers(const AerodynamicsGrid& grid)
     
     ivec3 dimensions = grid.GetDimensions();
     
-    // Sample every nth voxel to avoid too many vectors
-    int skipFactor = std::max(1, dimensions.x / 20);
+    // Adaptive sampling - higher density near boundaries and flow regions
+    int baseSkipFactor = std::max(1, dimensions.x / 25);
     
-    for (int z = 0; z < dimensions.z; z += skipFactor) {
-        for (int y = 0; y < dimensions.y; y += skipFactor) {
-            for (int x = 0; x < dimensions.x; x += skipFactor) {
+    for (int z = 0; z < dimensions.z; z += baseSkipFactor) {
+        for (int y = 0; y < dimensions.y; y += baseSkipFactor) {
+            for (int x = 0; x < dimensions.x; x += baseSkipFactor) {
                 const Voxel& voxel = grid.GetVoxel(x, y, z);
                 
+                // Skip solid voxels and very low velocity areas
                 if (voxel.isSolid || length(voxel.velocity) < 0.001f) {
+                    continue;
+                }
+                
+                // Enhanced sampling near solid boundaries (around mesh)
+                bool nearBoundary = false;
+                int checkRadius = 2;
+                for (int dz = -checkRadius; dz <= checkRadius && !nearBoundary; dz++) {
+                    for (int dy = -checkRadius; dy <= checkRadius && !nearBoundary; dy++) {
+                        for (int dx = -checkRadius; dx <= checkRadius && !nearBoundary; dx++) {
+                            int nx = x + dx, ny = y + dy, nz = z + dz;
+                            if (nx >= 0 && nx < dimensions.x && 
+                                ny >= 0 && ny < dimensions.y && 
+                                nz >= 0 && nz < dimensions.z) {
+                                if (grid.GetVoxel(nx, ny, nz).isSolid) {
+                                    nearBoundary = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Sample at higher density near boundaries (where interesting flow occurs)
+                int currentSkip = nearBoundary ? std::max(1, baseSkipFactor / 2) : baseSkipFactor;
+                if ((x % currentSkip != 0) || (y % currentSkip != 0) || (z % currentSkip != 0)) {
                     continue;
                 }
                 
@@ -709,8 +810,18 @@ void AerodynamicsVisualizer::LoadShaders() {
 // Parameter control methods
 void AerodynamicsVisualizer::setParticleCount(int count) {
     settings.numParticles = count;
+    
+    // Immediately resize and reinitialize particles
+    particles.clear();
     particles.resize(count);
-    // Reinitialize particles if already set up
+    
+    // Initialize all particles with default values
+    for (int i = 0; i < count; i++) {
+        particles[i] = FlowParticle();
+        particles[i].life = 0.0f; // Force respawn on next update
+    }
+    
+    // Reinitialize particle buffers if already set up
     if (isInitialized) {
         SetupParticleBuffers();
     }
