@@ -1,5 +1,9 @@
 #include "Camera.h"
 
+// External view dimensions from main.cpp
+extern int view_width;
+extern int view_height;
+
 Camera::Camera()
 {
 	//Reset Transformation Local/World Matrices:
@@ -10,6 +14,9 @@ Camera::Camera()
 	this->WorldTransformation.MainMatrix = IdentityMatrix;
 	view_transformation = IdentityMatrix;
 	projection_transformation = IdentityMatrix;
+	
+	// Initialize perspective projection with default values
+	SetCameraPerspective(fov, 1920.0f, 1080.0f, nearPlane, farPlane);
 
 }
 
@@ -69,4 +76,38 @@ void Camera::SetCameraPerspective(float FOV_, float Width_, float Height_, float
 void Camera::SetMainMatrix()
 {
 	MainMatrix = view_transformation * GetProjectionTransformation();
+}
+
+// FOV manipulation methods for perspective projection zooming
+void Camera::AdjustFOV(float deltaFOV)
+{
+	fov += deltaFOV;
+	
+	// Clamp FOV between reasonable limits (10 to 120 degrees)
+	if (fov < 10.0f) fov = 10.0f;     // Reasonable minimum zoom in
+	if (fov > 120.0f) fov = 120.0f;   // Reasonable maximum zoom out
+	
+	// Update the perspective matrix with new FOV using current aspect ratio
+	float aspectRatio = (view_width > 0 && view_height > 0) ? 
+		static_cast<float>(view_width) / static_cast<float>(view_height) : Ratio;
+	PerspectiveMatrix = glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+}
+
+void Camera::SetFOV(float newFOV)
+{
+	fov = newFOV;
+	
+	// Clamp FOV between reasonable limits (10 to 120 degrees)
+	if (fov < 10.0f) fov = 10.0f;     // Reasonable minimum zoom in
+	if (fov > 120.0f) fov = 120.0f;   // Reasonable maximum zoom out
+	
+	// Update the perspective matrix with new FOV using current aspect ratio
+	float aspectRatio = (view_width > 0 && view_height > 0) ? 
+		static_cast<float>(view_width) / static_cast<float>(view_height) : Ratio;
+	PerspectiveMatrix = glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+}
+
+float Camera::GetFOV() const
+{
+	return fov;
 }

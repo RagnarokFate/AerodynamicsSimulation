@@ -59,11 +59,11 @@ bool AerodynamicsSystem::initialize(std::shared_ptr<MeshModel> meshModel)
         simParams.density = m_params.density;
         simParams.windVelocity = m_params.windVelocity;
         simParams.timeStep = m_params.timeStep;
-        m_fluidSim->Initialize(m_grid, simParams);
-
-        // Initialize visualizer
+        m_fluidSim->Initialize(m_grid, simParams);        // Initialize visualizer
         m_visualizer = std::make_shared<AerodynamicsVisualizer>();
         m_visualizer->Initialize();
+        
+        // Note: Post-processing will be initialized later from main.cpp when viewport dimensions are available
 
         // Apply initial conditions
         applyInitialConditions();
@@ -221,10 +221,14 @@ void AerodynamicsSystem::updateVisualizationParameters(const VisualizationParame
         // Update particle count if changed
         if (params.particleCount != m_visualizationParams.particleCount) {
             m_visualizer->setParticleCount(params.particleCount);
+            m_visualizationParams.particleCount = params.particleCount;
         }
         
         // Update streamline parameters
         m_visualizer->setStreamlineParameters(params.streamlineCount, params.maxStreamlineLength);
+        
+        // Force update of visualization data to apply changes immediately
+        updateVisualizationData();
     }
 }
 

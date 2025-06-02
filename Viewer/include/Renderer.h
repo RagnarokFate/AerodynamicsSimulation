@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include "Texture.h"
 #include "ShaderProgram.h"
+#include "PostProcessor.h"
 
 class Renderer
 {
@@ -18,6 +19,13 @@ public:
 	// RGB Axis rendering methods
 	void DrawRGBAxes(const glm::vec3& minBounds, const glm::vec3& maxBounds, const glm::mat4& view, const glm::mat4& projection);
 	void InitializeAxisBuffers();
+	
+	// Post-processing controls
+	void InitializePostProcessing(int width, int height);
+	void ResizePostProcessing(int width, int height);
+	void SetBlurParameters(float radius, float strength, int iterations);
+	void EnableBlur(bool enable);
+	bool IsBlurEnabled() const;
 
 private:
 	ShaderProgram ColorShader;
@@ -25,5 +33,9 @@ private:
 	// RGB Axis rendering resources
 	GLuint axisVAO, axisVBO;
 	bool axisBuffersInitialized = false;
+	
+	// Post-processing
+	PostProcessor postProcessor;
+	bool postProcessingInitialized = false;
 	
 };

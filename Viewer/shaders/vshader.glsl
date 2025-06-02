@@ -19,7 +19,7 @@ void main()
 {
 	// Apply the model transformation to the 'position' and 'normal' properties of the vertex,
 	// so the interpolated values of these properties will be available for using the fragment shader
-	orig_fragPos = vec3(vec4(pos, 1.0f));
+	orig_fragPos = vec3(model * vec4(pos, 1.0f));
 	fragPos = vec3(projection * view * model * vec4(pos, 1.0f));
 	fragNormal = vec3(projection * view * model * vec4(normal,1.0f));
 

@@ -6,6 +6,8 @@
 #include "AerodynamicsGrid.h"
 #include "FluidSimulation.h"
 #include "ShaderProgram.h"
+#include "PostProcessor.h"
+#include "Skybox.h"
 
 using namespace glm;
 
@@ -46,6 +48,20 @@ struct VisualizationSettings {
     float slicePlanePosition = 0.0f;
     
     VisualizationSettings() = default;
+};
+
+// Gaussian blur settings for post-processing
+struct BlurSettings {
+    bool enablePressureBlur = true;
+    bool enableVelocityBlur = true;
+    bool enableParticleBlur = false;
+    float blurRadius = 1.5f;
+    float blurStrength = 0.4f;
+    int blurIterations = 2;
+    bool adaptiveBlur = true;  // Adjust blur based on simulation data
+    float minBlurThreshold = 0.1f;  // Minimum change required for blur
+    
+    BlurSettings() = default;
 };
 
 // Particle for flow visualization
@@ -96,11 +112,19 @@ public:
     
     // Parameter control methods
     void setParticleCount(int count);
-    void setStreamlineParameters(int count, int maxLength);
-    
-    // Settings
+    void setStreamlineParameters(int count, int maxLength);    // Settings
     void SetVisualizationSettings(const VisualizationSettings& settings) { this->settings = settings; }
     const VisualizationSettings& GetVisualizationSettings() const { return settings; }
+    void SetBlurSettings(const BlurSettings& blurSettings) { this->blurSettings = blurSettings; }
+    const BlurSettings& GetBlurSettings() const { return blurSettings; }
+      // Post-processing controls - disabled for performance
+    void InitializePostProcessing(int width, int height) {}
+    void ResizePostProcessing(int width, int height) {}
+    void SetBlurParameters(float radius, float strength, int iterations) {}
+    void EnablePressureBlur(bool enable) {}
+    void EnableVelocityBlur(bool enable) {}
+    bool IsPressureBlurEnabled() const { return false; }
+    bool IsVelocityBlurEnabled() const { return false; }
     
     // Particle system
     void UpdateParticles(const FluidSimulation& simulation, float deltaTime);
@@ -118,17 +142,19 @@ public:
     float GetMaxVelocity(const AerodynamicsGrid& grid) const;
 
 private:    VisualizationSettings settings;
+    BlurSettings blurSettings;
     
     // OpenGL resources for velocity vectors
     GLuint velocityVAO, velocityVBO;
     std::vector<vec3> velocityVertices;
     std::vector<float> velocityVertexData; // Interleaved position and velocity data (6 floats per vertex)
     ShaderProgram velocityShader;
-    
-    // OpenGL resources for pressure visualization
+      // OpenGL resources for pressure visualization
     GLuint pressureVAO, pressureVBO;
     std::vector<vec3> pressureVertices;
     std::vector<vec3> pressureColors;
+    std::vector<float> pressureValues; // Store actual pressure values
+    float minPressure = 0.0f, maxPressure = 0.0f; // Pressure range for shader uniforms
     ShaderProgram pressureShader;
     
     // OpenGL resources for streamlines
@@ -141,11 +167,17 @@ private:    VisualizationSettings settings;
     GLuint particleVAO, particleVBO;
     std::vector<FlowParticle> particles;
     ShaderProgram particleShader;
-    
-    // OpenGL resources for grid
+      // OpenGL resources for grid
     GLuint gridVAO, gridVBO;
     std::vector<vec3> gridVertices;
     ShaderProgram gridShader;
+      // Post-processing - disabled for performance
+    // PostProcessor postProcessor;
+    bool postProcessingInitialized = false;
+    
+    // Skybox for background rendering
+    Skybox skybox;
+    bool skyboxInitialized = false;
     
     // Helper methods
     void SetupVelocityBuffers();

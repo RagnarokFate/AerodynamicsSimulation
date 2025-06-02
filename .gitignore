@@ -137,4 +137,7 @@ settings.local.*
 TEMP_*.md
 *_BACKUP_*.md
 
+ignore/
+
+
 CONTRIBUTING.md

@@ -19,7 +19,7 @@ using namespace std;
 Renderer::Renderer()
 {
 	// Constructor cleaned up - skybox and cubemap removed
-
+	postProcessingInitialized = false;
 }
 
 Renderer::~Renderer()
@@ -29,6 +29,8 @@ Renderer::~Renderer()
 		glDeleteVertexArrays(1, &axisVAO);
 		glDeleteBuffers(1, &axisVBO);
 	}
+	
+	// Post-processor will clean up itself automatically
 }
 
 void Renderer::Render(const Scene& scene)
@@ -92,6 +94,42 @@ void Renderer::LoadShaders()
 	
 	// Initialize axis rendering buffers
 	InitializeAxisBuffers();
+}
+
+void Renderer::InitializePostProcessing(int width, int height)
+{
+	postProcessor.Initialize(width, height);
+	postProcessingInitialized = true;
+	std::cout << "Renderer: Post-processing initialized with Gaussian blur support" << std::endl;
+}
+
+void Renderer::ResizePostProcessing(int width, int height)
+{
+	if (postProcessingInitialized) {
+		postProcessor.Resize(width, height);
+	}
+}
+
+void Renderer::SetBlurParameters(float radius, float strength, int iterations)
+{
+	if (postProcessingInitialized) {
+		postProcessor.SetBlurParameters(radius, strength, iterations);
+	}
+}
+
+void Renderer::EnableBlur(bool enable)
+{
+	if (postProcessingInitialized) {
+		postProcessor.EnableBlur(enable);
+	}
+}
+
+bool Renderer::IsBlurEnabled() const
+{
+	if (postProcessingInitialized) {
+		return postProcessor.IsBlurEnabled();
+	}
+	return false;
 }
 
 void Renderer::InitializeAxisBuffers()
@@ -165,12 +203,12 @@ void Renderer::DrawRGBAxes(const glm::vec3& minBounds, const glm::vec3& maxBound
 	glBindVertexArray(axisVAO);
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(axisVertices), axisVertices, GL_DYNAMIC_DRAW);
-	
-	// Use ColorShader for rendering
+		// Use ColorShader for rendering
 	ColorShader.use();
 	ColorShader.setUniform("model", glm::mat4(1.0f)); // Identity matrix
 	ColorShader.setUniform("view", view);
 	ColorShader.setUniform("projection", projection);
+	ColorShader.setUniform("TriangleFillMode", 5); // Use Simple Color mode for axes
 	
 	// Set line width for better visibility
 	glLineWidth(3.0f);
@@ -233,8 +271,8 @@ void Renderer::DrawMesh(MeshModel& input, mat4x4 LocalTransformation, mat4x4 Wor
 			glDrawArrays(GL_TRIANGLES, 0, input.GetVerticesData().size());
 			glBindVertexArray(0);
 		}
-		
-		// Enhanced wireframe visibility with thicker lines and brighter color
+				// Enhanced wireframe visibility with thicker lines and brighter color
+		ColorShader.setUniform("TriangleFillMode", 5); // Use Simple Color mode for wireframe
 		ColorShader.setUniform("color", glm::vec3(0.8, 0.8, 0.8)); // Brighter wireframe
 		glLineWidth(2.0f); // Thicker wireframe lines
 		
@@ -246,6 +284,9 @@ void Renderer::DrawMesh(MeshModel& input, mat4x4 LocalTransformation, mat4x4 Wor
 			glDrawArrays(GL_TRIANGLES, 0, input.GetVerticesData().size());
 			glBindVertexArray(0);
 		}
+		
+		// Reset TriangleFillMode back to the mesh's original mode
+		ColorShader.setUniform("TriangleFillMode", input.TriangleFillMode);
 		
 		// Reset line width
 		glLineWidth(1.0f);

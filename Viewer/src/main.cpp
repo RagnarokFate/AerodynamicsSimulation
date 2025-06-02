@@ -23,10 +23,10 @@
 bool show_demo_window = false;
 bool show_another_window = false;
 
-glm::vec4 clear_color = glm::vec4(0.2f, 0.2f, 0.2f, 1.00f);
+glm::vec4 clear_color = glm::vec4(1.0f, 1.0f, 1.0f, 1.00f);
 static int Model_Number = 0;
-static int view_width = 0;
-static int view_height = 0;
+int view_width = 0;  // Made global for access from Camera.cpp
+int view_height = 0; // Made global for access from Camera.cpp
 
 static vec2 PreviousPosition = vec2(0,0);
 static vec2 CurrentPosition = vec2(0,0);
@@ -50,6 +50,8 @@ void Cleanup(GLFWwindow* window);
 void DrawImguiMenus(ImGuiIO& io, Scene& scene);
 void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene);
 void PrintMatrix(mat4x4 input);
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+void InitializeAerodynamicsPostProcessing();
 /**
  * Function implementation
  */
@@ -64,16 +66,23 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 		Scene* scene = static_cast<Scene*>(glfwGetWindowUserPointer(window));
 		if (scene && scene->GetCameraCount() > 0) {
 			Camera& camera = scene->GetActiveCamera();
-					// Zoom with mouse wheel (corrected direction)
-		if (yoffset > 0.0) { // Scroll up - zoom in
-			vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
-			currentPos.z -= 0.5f; // Move camera closer (zoom in)
-			camera.LocalTransformation.SetTranslateBar(currentPos);
-		} else if (yoffset < 0.0) { // Scroll down - zoom out
-			vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
-			currentPos.z += 0.5f; // Move camera away (zoom out)
-			camera.LocalTransformation.SetTranslateBar(currentPos);
-		}
+			
+			// FOV-based zooming for perspective projection
+			if (camera.ProjectionStatus == 1) { // Perspective projection
+				float fovDelta = static_cast<float>(yoffset) * -2.0f; // Negative for natural zoom direction
+				camera.AdjustFOV(fovDelta);
+			} else {
+				// Fallback to translation-based zooming for other projection types
+				if (yoffset > 0.0) { // Scroll up - zoom in
+					vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
+					currentPos.z -= 0.5f; // Move camera closer (zoom in)
+					camera.LocalTransformation.SetTranslateBar(currentPos);
+				} else if (yoffset < 0.0) { // Scroll down - zoom out
+					vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
+					currentPos.z += 0.5f; // Move camera away (zoom out)
+					camera.LocalTransformation.SetTranslateBar(currentPos);
+				}
+			}
 		}
 	}
 }
@@ -94,16 +103,26 @@ int main(int argc, char **argv)
 	//Renderer renderer = Renderer(frameBufferWidth, frameBufferHeight);
 	Renderer renderer;
 	renderer.LoadShaders();
-
 	Scene scene = Scene();
 	Camera camera_main = Camera();
-	std::shared_ptr<Camera> Cameras = std::make_shared<Camera>(camera_main);
-	scene.AddCamera(Cameras);
+	std::shared_ptr<Camera> Cameras = std::make_shared<Camera>(camera_main);	scene.AddCamera(Cameras);	// Restore original camera setup - no special positioning needed
+	Camera& activeCamera = scene.GetActiveCamera();
+	
+	// Use Regular_Transformation view mode (original default)
+	activeCamera.ViewStatus = Regular_Transformation; 
+	
+	// Set initial camera position for better mesh viewing
+	activeCamera.LocalTransformation.SetTranslateBar(vec3(0.0f, 0.0f, 5.0f)); // Move camera back to see objects
+	
+	// Set up perspective projection with correct aspect ratio
+	activeCamera.SetCameraPerspective(activeCamera.GetFOV(), static_cast<float>(windowWidth), static_cast<float>(windowHeight), 
+		activeCamera.nearPlane, activeCamera.farPlane);
 	//shared_ptr<MeshModel> first_model = Utils::LoadMeshModel("C:\\Users\\user\\Desktop\\Graphics\\Data\\crate.obj");
 	//shared_ptr<MeshModel> first_model = Utils::LoadMeshModel("C:\\Users\\user\\Desktop\\Graphics\\Data\\bunny.obj");
 	//scene.AddModel(first_model);
 	ImGuiIO& io = SetupDearImgui(window);
 	glfwSetScrollCallback(window, ScrollCallback);
+	glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 	
 	// Set scene pointer for callbacks
 	glfwSetWindowUserPointer(window, &scene);
@@ -192,8 +211,6 @@ void RenderFrame(GLFWwindow* window, Scene& scene, Renderer& renderer, ImGuiIO& 
 	//glfwGetFramebufferSize(window, &frameBufferWidth, &frameBufferHeight);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.a);
 	glEnable(GL_DEPTH_TEST);
-	static vec2 PreviousPosition = vec2(io.MousePos.x, io.MousePos.y);
-	vec2 CurrentPosition = vec2(io.MousePos.x, io.MousePos.y);
 	
 	// Clear the screen and depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1319,6 +1336,9 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 					if (!aerodynamicsSystem->initialize(scene.GetActiveModelPointer())) {
 						aerodynamicsSystem.reset();
 						ImGui::OpenPopup("Error");
+					} else {
+						// Initialize post-processing for the newly created aerodynamics system
+						InitializeAerodynamicsPostProcessing();
 					}
 				} catch (const std::exception& e) {
 					aerodynamicsSystem.reset();
@@ -1431,8 +1451,7 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 				vizChanged = true;
 			}
 		}
-		
-		if (ImGui::Checkbox("Particles", &vizParams.showParticles)) {
+				if (ImGui::Checkbox("Particles", &vizParams.showParticles)) {
 			vizChanged = true;
 		}
 		if (vizParams.showParticles) {
@@ -1446,6 +1465,7 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 			vizChanged = true;
 		}
 		
+		// Apply visualization parameter changes
 		if (vizChanged) {
 			aerodynamicsSystem->updateVisualizationParameters(vizParams);
 		}
@@ -1475,4 +1495,37 @@ void PrintMatrix(mat4x4 input)
 		ImGui::Text("%f %f %f %f", input[i].x, input[i].y, input[i].z, input[i].w);
 	}
 	ImGui::NewLine();
+}
+
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+	// Update global viewport dimensions
+	view_width = width;
+	view_height = height;
+	
+	// Update OpenGL viewport
+	glViewport(0, 0, width, height);
+	
+	// Update post-processing for aerodynamics system if initialized
+	if (aerodynamicsSystem) {
+		auto visualizer = aerodynamicsSystem->getVisualizer();
+		if (visualizer) {
+			visualizer->ResizePostProcessing(width, height);
+		}
+	}
+	
+	std::cout << "Viewport resized to: " << width << "x" << height << std::endl;
+}
+
+void InitializeAerodynamicsPostProcessing()
+{
+	// Initialize post-processing for aerodynamics system if it exists
+	if (aerodynamicsSystem && view_width > 0 && view_height > 0) {
+		auto visualizer = aerodynamicsSystem->getVisualizer();
+		if (visualizer) {
+			visualizer->InitializePostProcessing(view_width, view_height);
+			std::cout << "Aerodynamics post-processing initialized with viewport: " 
+			          << view_width << "x" << view_height << std::endl;
+		}
+	}
 }

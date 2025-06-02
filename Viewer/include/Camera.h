@@ -21,12 +21,17 @@ public:
 	glm::mat4x4 GetProjectionTransformation();
 	void Camera::SetMainMatrix();
 	
+	// FOV manipulation methods for zooming
+	void Camera::AdjustFOV(float deltaFOV);
+	void Camera::SetFOV(float newFOV);
+	float Camera::GetFOV() const;
+	
 
 
 public:
 	float Ratio = 1980 / 1080;
-	int ProjectionStatus = 0;
-	int ViewStatus = 0;
+	int ProjectionStatus = 1; // Set to Perspective by default (1 = Perspective, 0 = Orthographic, 2 = Frustum)
+	int ViewStatus = 0; // Restore original Regular_Transformation view mode
 	public: 
 	glm::mat4x4 view_transformation = mat4x4(1.0f);
 	glm::mat4x4 projection_transformation = mat4x4(1.0f);
@@ -36,11 +41,13 @@ public:
 	mat4x4 FrustumMatrix = mat4x4(1.0f);
 	mat4x4 PerspectiveMatrix = mat4x4(1.0f);
 
-	vec3 eye = vec3(0.0f, 0.0f, 0.0f);
-	vec3 at = vec3(0.0f, 0.0f, -1.0f);
+	vec3 eye = vec3(0.0f, 0.0f, 0.0f); // Restore original camera position at origin
+	vec3 at = vec3(0.0f, 0.0f, -1.0f); // Restore original look direction
 	vec3 up = vec3(0.0f, 1.0f, 0.0f);
 
-	float fov = 1;
+	float fov = 45.0f; // Default FOV of 45 degrees
+	float nearPlane = 0.1f; // Restore original near plane
+	float farPlane = 100.0f; // Restore original far plane
 
 public:
 	Transformation LocalTransformation = Transformation();
