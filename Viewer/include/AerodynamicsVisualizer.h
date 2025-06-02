@@ -7,6 +7,7 @@
 #include "FluidSimulation.h"
 #include "ShaderProgram.h"
 #include "PostProcessor.h"
+#include "Skybox.h"
 
 using namespace glm;
 
@@ -116,15 +117,14 @@ public:
     const VisualizationSettings& GetVisualizationSettings() const { return settings; }
     void SetBlurSettings(const BlurSettings& blurSettings) { this->blurSettings = blurSettings; }
     const BlurSettings& GetBlurSettings() const { return blurSettings; }
-    
-    // Post-processing controls
-    void InitializePostProcessing(int width, int height);
-    void ResizePostProcessing(int width, int height);
-    void SetBlurParameters(float radius, float strength, int iterations);
-    void EnablePressureBlur(bool enable);
-    void EnableVelocityBlur(bool enable);
-    bool IsPressureBlurEnabled() const;
-    bool IsVelocityBlurEnabled() const;
+      // Post-processing controls - disabled for performance
+    void InitializePostProcessing(int width, int height) {}
+    void ResizePostProcessing(int width, int height) {}
+    void SetBlurParameters(float radius, float strength, int iterations) {}
+    void EnablePressureBlur(bool enable) {}
+    void EnableVelocityBlur(bool enable) {}
+    bool IsPressureBlurEnabled() const { return false; }
+    bool IsVelocityBlurEnabled() const { return false; }
     
     // Particle system
     void UpdateParticles(const FluidSimulation& simulation, float deltaTime);
@@ -149,11 +149,12 @@ private:    VisualizationSettings settings;
     std::vector<vec3> velocityVertices;
     std::vector<float> velocityVertexData; // Interleaved position and velocity data (6 floats per vertex)
     ShaderProgram velocityShader;
-    
-    // OpenGL resources for pressure visualization
+      // OpenGL resources for pressure visualization
     GLuint pressureVAO, pressureVBO;
     std::vector<vec3> pressureVertices;
     std::vector<vec3> pressureColors;
+    std::vector<float> pressureValues; // Store actual pressure values
+    float minPressure = 0.0f, maxPressure = 0.0f; // Pressure range for shader uniforms
     ShaderProgram pressureShader;
     
     // OpenGL resources for streamlines
@@ -170,15 +171,13 @@ private:    VisualizationSettings settings;
     GLuint gridVAO, gridVBO;
     std::vector<vec3> gridVertices;
     ShaderProgram gridShader;
-    
-    // Post-processing
-    PostProcessor postProcessor;
+      // Post-processing - disabled for performance
+    // PostProcessor postProcessor;
     bool postProcessingInitialized = false;
-    bool pressureBlurEnabled = true;
-    bool velocityBlurEnabled = true;
-    float blurRadius = 1.5f;
-    float blurStrength = 0.4f;
-    int blurIterations = 2;
+    
+    // Skybox for background rendering
+    Skybox skybox;
+    bool skyboxInitialized = false;
     
     // Helper methods
     void SetupVelocityBuffers();

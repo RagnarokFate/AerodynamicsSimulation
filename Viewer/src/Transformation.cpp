@@ -3,7 +3,7 @@
 
 Transformation::Transformation()
 {
-	Scale = vec3(200.0f,200.0f,10.0f), Translate = vec3(640,360,1.0f), Rotate = vec3(0.0f,0.0f,0.0f);
+	Scale = vec3(1.0f, 1.0f, 1.0f), Translate = vec3(0.0f, 0.0f, 0.0f), Rotate = vec3(0.0f, 0.0f, 0.0f);
 }
 
 Transformation::~Transformation()

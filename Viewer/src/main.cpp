@@ -25,8 +25,8 @@ bool show_another_window = false;
 
 glm::vec4 clear_color = glm::vec4(1.0f, 1.0f, 1.0f, 1.00f);
 static int Model_Number = 0;
-static int view_width = 0;
-static int view_height = 0;
+int view_width = 0;  // Made global for access from Camera.cpp
+int view_height = 0; // Made global for access from Camera.cpp
 
 static vec2 PreviousPosition = vec2(0,0);
 static vec2 CurrentPosition = vec2(0,0);
@@ -66,16 +66,23 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 		Scene* scene = static_cast<Scene*>(glfwGetWindowUserPointer(window));
 		if (scene && scene->GetCameraCount() > 0) {
 			Camera& camera = scene->GetActiveCamera();
-					// Zoom with mouse wheel (corrected direction)
-		if (yoffset > 0.0) { // Scroll up - zoom in
-			vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
-			currentPos.z -= 0.5f; // Move camera closer (zoom in)
-			camera.LocalTransformation.SetTranslateBar(currentPos);
-		} else if (yoffset < 0.0) { // Scroll down - zoom out
-			vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
-			currentPos.z += 0.5f; // Move camera away (zoom out)
-			camera.LocalTransformation.SetTranslateBar(currentPos);
-		}
+			
+			// FOV-based zooming for perspective projection
+			if (camera.ProjectionStatus == 1) { // Perspective projection
+				float fovDelta = static_cast<float>(yoffset) * -2.0f; // Negative for natural zoom direction
+				camera.AdjustFOV(fovDelta);
+			} else {
+				// Fallback to translation-based zooming for other projection types
+				if (yoffset > 0.0) { // Scroll up - zoom in
+					vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
+					currentPos.z -= 0.5f; // Move camera closer (zoom in)
+					camera.LocalTransformation.SetTranslateBar(currentPos);
+				} else if (yoffset < 0.0) { // Scroll down - zoom out
+					vec3 currentPos = camera.LocalTransformation.GetTranslateBar();
+					currentPos.z += 0.5f; // Move camera away (zoom out)
+					camera.LocalTransformation.SetTranslateBar(currentPos);
+				}
+			}
 		}
 	}
 }
@@ -96,11 +103,20 @@ int main(int argc, char **argv)
 	//Renderer renderer = Renderer(frameBufferWidth, frameBufferHeight);
 	Renderer renderer;
 	renderer.LoadShaders();
-
 	Scene scene = Scene();
 	Camera camera_main = Camera();
-	std::shared_ptr<Camera> Cameras = std::make_shared<Camera>(camera_main);
-	scene.AddCamera(Cameras);
+	std::shared_ptr<Camera> Cameras = std::make_shared<Camera>(camera_main);	scene.AddCamera(Cameras);	// Restore original camera setup - no special positioning needed
+	Camera& activeCamera = scene.GetActiveCamera();
+	
+	// Use Regular_Transformation view mode (original default)
+	activeCamera.ViewStatus = Regular_Transformation; 
+	
+	// Set initial camera position for better mesh viewing
+	activeCamera.LocalTransformation.SetTranslateBar(vec3(0.0f, 0.0f, 5.0f)); // Move camera back to see objects
+	
+	// Set up perspective projection with correct aspect ratio
+	activeCamera.SetCameraPerspective(activeCamera.GetFOV(), static_cast<float>(windowWidth), static_cast<float>(windowHeight), 
+		activeCamera.nearPlane, activeCamera.farPlane);
 	//shared_ptr<MeshModel> first_model = Utils::LoadMeshModel("C:\\Users\\user\\Desktop\\Graphics\\Data\\crate.obj");
 	//shared_ptr<MeshModel> first_model = Utils::LoadMeshModel("C:\\Users\\user\\Desktop\\Graphics\\Data\\bunny.obj");
 	//scene.AddModel(first_model);
@@ -1435,8 +1451,7 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 				vizChanged = true;
 			}
 		}
-		
-		if (ImGui::Checkbox("Particles", &vizParams.showParticles)) {
+				if (ImGui::Checkbox("Particles", &vizParams.showParticles)) {
 			vizChanged = true;
 		}
 		if (vizParams.showParticles) {
@@ -1445,115 +1460,14 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene)
 				vizChanged = true;
 			}
 		}
-				if (ImGui::Checkbox("Grid Wireframe", &vizParams.showGrid)) {
+		
+		if (ImGui::Checkbox("Grid Wireframe", &vizParams.showGrid)) {
 			vizChanged = true;
 		}
 		
 		// Apply visualization parameter changes
 		if (vizChanged) {
 			aerodynamicsSystem->updateVisualizationParameters(vizParams);
-		}
-		
-		// Post-processing controls for Gaussian blur
-		if (ImGui::CollapsingHeader("Post-Processing")) {
-			auto visualizer = aerodynamicsSystem->getVisualizer();
-			if (visualizer) {
-				ImGui::Text("Gaussian Blur Settings:");
-				
-				// Pressure field blur controls
-				bool pressureBlurEnabled = visualizer->IsPressureBlurEnabled();
-				if (ImGui::Checkbox("Pressure Field Blur", &pressureBlurEnabled)) {
-					visualizer->EnablePressureBlur(pressureBlurEnabled);
-				}
-				if (pressureBlurEnabled) {
-					ImGui::Indent();
-					ImGui::Text("Smooths pressure visualization for cleaner data display");
-					ImGui::Unindent();
-				}
-				
-				// Velocity field blur controls  
-				bool velocityBlurEnabled = visualizer->IsVelocityBlurEnabled();
-				if (ImGui::Checkbox("Velocity Field Blur", &velocityBlurEnabled)) {
-					visualizer->EnableVelocityBlur(velocityBlurEnabled);
-				}
-				if (velocityBlurEnabled) {
-					ImGui::Indent();
-					ImGui::Text("Smooths velocity vectors for enhanced flow visualization");
-					ImGui::Unindent();
-				}
-				
-				// Blur parameters (only show if at least one blur is enabled)
-				if (pressureBlurEnabled || velocityBlurEnabled) {
-					ImGui::Separator();
-					ImGui::Text("Blur Parameters:");
-					
-					// Get current blur settings from the visualizer
-					static float blurRadius = 1.5f;
-					static float blurStrength = 0.4f;
-					static int blurIterations = 2;
-					
-					bool blurParamsChanged = false;
-					if (ImGui::SliderFloat("Blur Radius", &blurRadius, 0.1f, 5.0f, "%.2f")) {
-						blurParamsChanged = true;
-					}
-					ImGui::SameLine(); 
-					if (ImGui::Button("?##radius")) {
-						ImGui::SetTooltip("Controls the spread of the blur effect. Higher values create more diffuse smoothing.");
-					}
-					
-					if (ImGui::SliderFloat("Blur Strength", &blurStrength, 0.1f, 1.0f, "%.2f")) {
-						blurParamsChanged = true;
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("?##strength")) {
-						ImGui::SetTooltip("Controls the intensity of the blur effect. Higher values create stronger smoothing.");
-					}
-					
-					if (ImGui::SliderInt("Blur Iterations", &blurIterations, 1, 5)) {
-						blurParamsChanged = true;
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("?##iterations")) {
-						ImGui::SetTooltip("Number of blur passes. More iterations create smoother results but reduce performance.");
-					}
-					
-					// Apply blur parameters if changed
-					if (blurParamsChanged) {
-						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
-					}
-					
-					// Performance warning for high settings
-					if (blurIterations > 3 || blurRadius > 3.0f) {
-						ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ High blur settings may impact performance");
-					}
-					
-					// Quick presets
-					ImGui::Separator();
-					ImGui::Text("Quick Presets:");
-					if (ImGui::Button("Subtle")) {
-						blurRadius = 1.0f;
-						blurStrength = 0.2f;
-						blurIterations = 1;
-						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Moderate")) {
-						blurRadius = 1.5f;
-						blurStrength = 0.4f;
-						blurIterations = 2;
-						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Strong")) {
-						blurRadius = 2.5f;
-						blurStrength = 0.7f;
-						blurIterations = 3;
-						visualizer->SetBlurParameters(blurRadius, blurStrength, blurIterations);
-					}
-				}
-			} else {
-				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Post-processing unavailable - visualizer not initialized");
-			}
 		}
 	}
 

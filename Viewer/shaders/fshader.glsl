@@ -39,6 +39,9 @@ uniform	vec3 MeshModelSpecular;
 //Camera View Properties
 uniform vec3 CameraPosition;
 
+// Additional color uniform for simple color rendering
+uniform vec3 color;
+
 // Inputs from vertex shader (after interpolation was applied)
 in vec3 fragPos;
 in vec3 fragNormal;
@@ -62,6 +65,10 @@ void main()
 	//=====================================================================================================
 			case 1: //Specfic Color
 			frag_color = vec4(MeshModelColor,1.0f);
+				break;
+	//=====================================================================================================
+			case 5: //Simple Color (for wireframe, axes, etc.)
+			frag_color = vec4(color,1.0f);
 				break;
 	//=====================================================================================================
 			case 2: //With Light No Texture
