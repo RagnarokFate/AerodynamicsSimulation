@@ -16,6 +16,7 @@
 #include "Scene.h"
 #include "Utils.h"
 #include "AerodynamicsSystem.h"
+#include "Skybox.h"
 //static int slected_item_frame = 0;
 /**
  * Fields
@@ -39,6 +40,12 @@ static bool showAerodynamicsWindow = false;
 static float lastFrameTime = 0.0f;
 
 /**
+ * Skybox System
+ */
+static Skybox globalSkybox;
+static bool skyboxInitialized = false;
+
+/**
  * Function declarations
  */
 static void GlfwErrorCallback(int error, const char* description);
@@ -52,6 +59,7 @@ void DrawAerodynamicsMenu(ImGuiIO& io, Scene& scene);
 void PrintMatrix(mat4x4 input);
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 void InitializeAerodynamicsPostProcessing();
+void InitializeSkybox();
 /**
  * Function implementation
  */
@@ -211,17 +219,34 @@ void RenderFrame(GLFWwindow* window, Scene& scene, Renderer& renderer, ImGuiIO& 
 	//glfwGetFramebufferSize(window, &frameBufferWidth, &frameBufferHeight);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.a);
 	glEnable(GL_DEPTH_TEST);
-	
 	// Clear the screen and depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	
 	//renderer.ClearColorBuffer(clear_color);
 	renderer.Render(scene);
 	
 	// Render aerodynamics visualization
 	if (aerodynamicsSystem && scene.GetCameraCount() > 0) {
-		Camera& camera = scene.GetActiveCamera();        glm::mat4 view = camera.view_transformation;
+		Camera& camera = scene.GetActiveCamera();
+		glm::mat4 view = camera.view_transformation;
 		glm::mat4 projection = camera.GetProjectionTransformation();
 		aerodynamicsSystem->render(view, projection);
+	}
+		// Render skybox LAST (background) if enabled
+	if (scene.Skybox && scene.GetCameraCount() > 0) {
+		// Initialize skybox if not already done
+		if (!skyboxInitialized) {
+			InitializeSkybox();
+		}
+		
+		if (skyboxInitialized) {
+			Camera& camera = scene.GetActiveCamera();
+			glm::mat4 view = camera.view_transformation;
+			glm::mat4 projection = camera.GetProjectionTransformation();
+			
+			// The skybox handles its own depth function internally
+			globalSkybox.Render(view, projection);
+		}
 	}
 	
 	//renderer.SwapBuffers();
@@ -489,12 +514,12 @@ void DrawImguiMenus(ImGuiIO& io, Scene& scene)
 				ImGui::Checkbox("Draw Rays", &scene.DrawRays);
 				if (scene.DrawRays)
 					ImGui::InputFloat("Rays Length", &scene.RayLength, 25, 0, 0, 1);
-			}
-			ImGui::Checkbox("World Axis", &scene.World_Axis);
+			}			ImGui::Checkbox("World Axis", &scene.World_Axis);
 			if (scene.World_Axis)
 			{
 				ImGui::InputFloat("World Length", &scene.World_Length, 50.0f);
 			}
+			ImGui::Checkbox("Skybox", &scene.Skybox);
 			ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -1526,6 +1551,27 @@ void InitializeAerodynamicsPostProcessing()
 			visualizer->InitializePostProcessing(view_width, view_height);
 			std::cout << "Aerodynamics post-processing initialized with viewport: " 
 			          << view_width << "x" << view_height << std::endl;
+		}
+	}
+}
+
+void InitializeSkybox()
+{
+	if (!skyboxInitialized) {
+		std::vector<std::string> faces = {
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/right.jpg",
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/left.jpg",
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/top.jpg",
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/bottom.jpg",
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/front.jpg",
+			"C:/Users/pc/Desktop/Root/Projects/AerodynamicsSimulation/Data/SkyBox/Skybox_1/back.jpg"
+		};
+		
+		if (globalSkybox.Load(faces, "skybox_vertex.glsl", "skybox_fragment.glsl")) {
+			skyboxInitialized = true;
+			std::cout << "Skybox initialized successfully" << std::endl;
+		} else {
+			std::cerr << "Failed to initialize skybox" << std::endl;
 		}
 	}
 }
